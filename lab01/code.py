@@ -2,31 +2,45 @@ import re
 from datetime import datetime
 
 class PasswordSecurityAnalyzer:
+    """Клас для аналізу безпеки пароля на основі різних критеріїв."""
     def __init__(self):
+        # Список дуже поширених і небезпечних паролів (зламані паролі)
         self.common_passwords = [
             "password", "123456", "qwerty", "admin", "letmein", 
             "welcome", "monkey", "dragon", "master", "secret"
         ]
         
+        # Список поширених словникових слів
         self.common_words = [
             "love", "money", "baby", "angel", "princess", "sunshine"
         ]
 
     def analyze_password(self, password, personal_data):
-        """Основна функція аналізу пароля"""
+        """
+        Основна функція аналізу пароля.
+        Розраховує загальний бал безпеки та формує рекомендації.
+        """
+        # 1. Перевірка на наявність персональних даних
         personal_issues = self._check_personal_data(password, personal_data)
+        # 2. Розрахунок початкового балу складності (на основі довжини та типів символів)
         complexity_score = self._calculate_complexity(password)
+        # 3. Перевірка на наявність небезпечних шаблонів (послідовності, повторення, поширені паролі)
         patterns = self._check_patterns(password)
+        # 4. Перевірка на наявність словникових слів
         words = self._check_words(password)
         
-        # Загальний бал (1-10)
+        # Загальний бал (1-10) - починається з балу складності
         total_score = complexity_score
+        # Зниження балу за персональні дані (найбільший штраф)
         total_score -= len(personal_issues) * 1.5
+        # Зниження балу за небезпечні шаблони
         total_score -= len(patterns) * 1
+        # Зниження балу за словникові слова
         total_score -= len(words) * 0.5
+        # Обмеження загального балу від 1 до 10
         total_score = max(1, min(10, round(total_score)))
         
-        # Рекомендації
+        # Формування рекомендацій
         recommendations = self._get_recommendations(
             password, personal_issues, patterns, words
         )
@@ -43,35 +57,41 @@ class PasswordSecurityAnalyzer:
         }
 
     def _check_personal_data(self, password, personal_data):
-        """Перевірка персональних даних у паролі"""
+        """Перевірка на наявність імені та дати народження користувача у паролі."""
         issues = []
         password_lower = password.lower()
         
-        # Ім'я
+        # Перевірка імені
         if personal_data.get("name"):
             name = personal_data["name"].lower()
             if name in password_lower:
                 issues.append(f"Містить ім'я: {personal_data['name']}")
         
-        # Дата народження
+        # Перевірка дати народження
         if personal_data.get("birth_date"):
             birth_date = personal_data["birth_date"]
             year = str(birth_date.year)
+            # Форматування дня та місяця з нулем, якщо потрібно
             month = f"{birth_date.month:02d}"
             day = f"{birth_date.day:02d}"
             
             if year in password:
                 issues.append(f"Містить рік народження: {year}")
+            # Перевірка комбінацій день+місяць та місяць+день
             if f"{day}{month}" in password or f"{month}{day}" in password:
                 issues.append("Містить день/місяць народження")
         
         return issues
 
     def _calculate_complexity(self, password):
-        """Розрахунок складності пароля"""
+        """
+        Розрахунок початкового балу складності (макс. 7) на основі:
+        - Довжини (макс. 3 бали)
+        - Наявності різних типів символів (макс. 4 бали: малі/великі літери, цифри, спецсимволи)
+        """
         score = 0
         
-        # Довжина
+        # Бали за довжину
         length = len(password)
         if length >= 12:
             score += 3
@@ -80,52 +100,54 @@ class PasswordSecurityAnalyzer:
         elif length >= 6:
             score += 1
         
-        # Типи символів
-        if re.search(r'[a-zа-я]', password):
+        # Бали за типи символів (регулярні вирази)
+        if re.search(r'[a-zа-я]', password): # Малі літери (латиниця/кирилиця)
             score += 1
-        if re.search(r'[A-ZА-Я]', password):
+        if re.search(r'[A-ZА-Я]', password): # Великі літери (латиниця/кирилиця)
             score += 1
-        if re.search(r'\d', password):
+        if re.search(r'\d', password):       # Цифри
             score += 1
+        # Спеціальні символи
         if re.search(r'[!@#$%^&*()_+\-=\[\]{}|;\':",./<>?]', password):
             score += 1
         
-        return min(score, 7)
+        return min(score, 7) # Обмеження максимального балу складності
 
     def _check_patterns(self, password):
-        """Перевірка небезпечних шаблонів"""
+        """Перевірка небезпечних шаблонів: послідовності, повторення та поширені паролі."""
         patterns = []
         password_lower = password.lower()
         
-        # Послідовності
+        # Послідовності (123, abc, qwe, йцу)
         if re.search(r'123|abc|qwe|йцу', password_lower):
             patterns.append("Послідовні символи")
         
-        # Повторення
+        # Повторення символів (мінімум 3 однакові символи підряд, напр. 'aaa')
         if re.search(r'(.)\1{2,}', password):
             patterns.append("Повторення символів")
         
-        # Поширені паролі
+        # Поширені (зламані) паролі
         for common in self.common_passwords:
             if common in password_lower:
                 patterns.append(f"Поширений пароль: {common}")
-                break
+                break # Достатньо одного збігу
         
         return patterns
 
     def _check_words(self, password):
-        """Перевірка словникових слів"""
+        """Перевірка на наявність простих словникових слів (з визначеного списку)."""
         words = []
         password_lower = password.lower()
         
         for word in self.common_words:
+            # Перевіряємо, чи слово є в паролі і має довжину більше 3 символів
             if word in password_lower and len(word) > 3:
                 words.append(word)
         
         return words
 
     def _get_security_level(self, score):
-        """Рівень безпеки"""
+        """Визначення текстового рівня безпеки за загальним балом."""
         if score >= 8:
             return "Високий"
         elif score >= 6:
@@ -136,12 +158,14 @@ class PasswordSecurityAnalyzer:
             return "Дуже низький"
 
     def _get_recommendations(self, password, personal_issues, patterns, words):
-        """Рекомендації для покращення"""
+        """Формування списку конкретних рекомендацій для покращення пароля."""
         recommendations = []
         
+        # Рекомендації на основі виявлених проблем
         if personal_issues:
             recommendations.append("Уникайте персональних даних у паролі")
         
+        # Рекомендації для підвищення складності
         if len(password) < 12:
             recommendations.append("Збільште довжину до мінімум 12 символів")
         
@@ -157,6 +181,7 @@ class PasswordSecurityAnalyzer:
         if not re.search(r'[!@#$%^&*()_+\-=\[\]{}|;\':",./<>?]', password):
             recommendations.append("Додайте спеціальні символи")
         
+        # Рекомендації на основі шаблонів/слів
         if patterns:
             recommendations.append("Уникайте поширених шаблонів")
         
@@ -166,16 +191,18 @@ class PasswordSecurityAnalyzer:
         return recommendations
 
     def print_report(self, results):
-        """Виведення звіту"""
+        """Виведення відформатованого звіту аналізу пароля."""
         print("=" * 50)
         print("АНАЛІЗ БЕЗПЕКИ ПАРОЛЯ")
         print("=" * 50)
         
-        print(f"Пароль: {'*' * len(results['password'])}")
+        # Загальна інформація
+        print(f"Пароль: {'*' * len(results['password'])}") # Пароль приховано
         print(f"Загальний бал: {results['total_score']}/10")
         print(f"Рівень безпеки: {results['security_level']}")
         print(f"Бал складності: {results['complexity_score']}/7")
         
+        # Деталі проблем
         if results["personal_issues"]:
             print("\nПроблеми з персональними даними:")
             for issue in results["personal_issues"]:
@@ -191,6 +218,7 @@ class PasswordSecurityAnalyzer:
             for word in results["words"]:
                 print(f"  - {word}")
         
+        # Рекомендації
         print("\nРекомендації:")
         if results["recommendations"]:
             for rec in results["recommendations"]:
@@ -200,7 +228,10 @@ class PasswordSecurityAnalyzer:
 
 
 def parse_date(date_string):
-    """Парсинг дати"""
+    """
+    Парсинг рядка дати у об'єкт date з datetime.
+    Підтримує кілька поширених форматів.
+    """
     formats = ['%d.%m.%Y', '%d/%m/%Y', '%Y-%m-%d']
     
     for fmt in formats:
@@ -209,11 +240,12 @@ def parse_date(date_string):
         except ValueError:
             continue
     
+    # Якщо жоден формат не підійшов
     raise ValueError(f"Неправильний формат дати: {date_string}")
 
 
 def main():
-    """Основна програма"""
+    """Основна програма для взаємодії з користувачем."""
     analyzer = PasswordSecurityAnalyzer()
     
     print("АНАЛІЗАТОР БЕЗПЕКИ ПАРОЛІВ")
@@ -234,9 +266,11 @@ def main():
     birth_date = input("Дата народження (дд.мм.рррр): ").strip()
     if birth_date:
         try:
+            # Парсинг дати за допомогою допоміжної функції
             personal_data["birth_date"] = parse_date(birth_date)
         except ValueError as e:
             print(f"Помилка: {e}")
+            # Можна продовжити без дати, якщо парсинг не вдався
     
     # Аналіз
     print("\nАналіз...")
@@ -249,13 +283,13 @@ def main():
 
 # Демо приклад
 def demo():
-    """Демонстраційний приклад"""
+    """Демонстраційна функція з тестовим паролем і даними."""
     print("ДЕМОНСТРАЦІЙНИЙ ПРИКЛАД")
     print("=" * 30)
     
     analyzer = PasswordSecurityAnalyzer()
     
-    # Тестові дані
+    # Тестові дані, що містять ім'я та рік народження в паролі
     password = "ivan1995"
     personal_data = {
         "name": "Іван",
@@ -271,9 +305,9 @@ def demo():
 
 
 if __name__ == "__main__":
-    # Демо
+    # Виконання демонстрації
     demo()
     print("\n" + "=" * 50)
     
-    # Основна програма
+    # Запуск основної програми
     main()
